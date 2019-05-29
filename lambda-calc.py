@@ -6,122 +6,128 @@ from time import clock
 #   eg. (<condition>)(lambda: <True case>)(lambda: <False case>)
 
 def num(n):
-    ''' Returns the Church numeral equivalent of n '''
-    return '(lambda s: lambda x: '+ 's('*int(n) + 'x' + ')'*int(n) + ')'
+    ''' Returns Church numeral representation of n. '''
+    return '(#s:#x:{}x{})'.format('s(' * int(n), ')' * int(n))
 
-def initializeDict(altPred=False):
-    ''' Initializes the identifier dictionary for low-level functions '''
-    # NOTE: Setting altPred to True will lengthen the expression, but can sometimes speed up execution significantly
-    global nameDict
-    nameDict = {}
+def token(tok, string, arity=0):
+    global tokens
+    tokens[tok] = (string, arity)
 
-    # TRUE AND FALSE
-    nameDict['T'] = '(lambda x: lambda y: x())'
-    nameDict['F'] = '(lambda x: lambda y: y())'
+def make_tokens(alt_pred=False):
+    ''' Creates tokens for low-level functions. Setting alt_pred lengthens expression, but can speed
+    up execution. '''
+    # True & False
+    token('T', '(#x:#y:x())')
+    token('F', '(#x:#y:y())')
 
-    # BOOLEAN OPERATIONS
-    nameDict['NOT'] = '(lambda x: x(lambda: F)(lambda: T))'
-    nameDict['AND'] = '(lambda x: lambda y: x(lambda: y)(lambda: F))'
-    nameDict['OR'] = '(lambda x: lambda y: x(lambda: T)(lambda: y))'
-    nameDict['XOR'] = '(lambda x: lambda y: OR(AND(x)(NOT(y)))(AND(NOT(x))(y)))'
+    # Boolean Operators
+    token('~', '(#x:x(#:F)(#:T))') # Not
+    token('&', '(#x:#y:x(#:y)(#:F))') # And
+    token('|', '(#x:#y:x(#:T)(#:y))') # Or
+    token('^', '(#x:#y:|(&(x)(~(y)))(&(~(x))(y)))') # Xor
 
-    # BASIC ARITHMETIC OPERATIONS
-    nameDict['S'] = '(lambda x: lambda y: lambda z: y(x(y)(z)))'
-    nameDict['M'] = '(lambda x: lambda y: lambda z: x(y(z)))'
-    nameDict['POW'] = '(lambda x: lambda y: y(x))'
-    if altPred:
-        nameDict['PHI'] = '(lambda p: lambda x: x(lambda: S(p(T)))(lambda: p(T)))'
-        nameDict['P'] = '(lambda x: x(PHI)(lambda y: y(lambda: lambda s: lambda x: x)(lambda: lambda s: lambda x: x))(F))'
-    else: nameDict['P'] = '(lambda n: lambda f: lambda x: n(lambda g: lambda h: h(g(f)))(lambda y: x)(lambda y: y))'
+    # Arithmetic Operators
+    token('*', '(#x:#y:#z:x(y(z)))') # Multiply
+    token('**', '(#x:#y:y(x))') # Exponentiate
+    token('++', '(#x:#y:#z:y(x(y)(z)))') # Increment
+    if alt_pred:
+        token('PHI', '(#p:#x:x(#:++(p(T)))(#:p(T)))')
+        token('--', '(#x:x(PHI)(#y:y(#:#s:#x:x)(#:#s:#x:x))(F))') # Decrement
+    else: token('--', '(#n:#f:#x:n(#g:#h:h(g(f)))(#y:x)(#y:y))') # Decrement
+    token('+', '(#x:#y:x(++)(y))') # Sum
+    token('-', '(#x:#y:y(--)(x))') # Difference
 
-    # EQUALITIES AND INEQUALITIES
-    nameDict['Z'] = '(lambda x: x(lambda y: F)(T))'
-    nameDict['GTE'] = '(lambda x: lambda y: Z(x(P)(y)))'
-    nameDict['LTE'] = '(lambda x: lambda y: Z(y(P)(x)))'
-    nameDict['E'] = '(lambda x: lambda y: AND(GTE(x)(y))(GTE(y)(x)))'
-    nameDict['GT'] = '(lambda x: lambda y: NOT(Z(y(P)(x))))'
-    nameDict['LT'] = '(lambda x: lambda y: NOT(Z(x(P)(y))))'
+    # Relational Operators
+    token('Z', '(#x:x(#y:F)(T))') # Test for zero
+    token('>=', '(#x:#y:Z(-(y)(x)))')
+    token('<=', '(#x:#y:Z(-(x)(y)))')
+    token('=', '(#x:#y:&(>=(x)(y))(>=(y)(x)))')
+    token('>', '(#x:#y:~(Z(-(x)(y))))')
+    token('<', '(#x:#y:~(Z(-(y)(x))))')
 
-    # RECURSION
-    nameDict['Y'] = '(lambda h: lambda f: f(lambda x: h(h)(f)(x)))(lambda h: lambda f: f(lambda x: h(h)(f)(x)))'
+    # Recursion
+    token('Y', '(#h:#f:f(#x:h(h)(f)(x)))(#h:#f:f(#x:h(h)(f)(x)))')
 
-    # DIV AND MOD
-    nameDict['DIV'] = 'Y(lambda r: lambda x: lambda y: LT(x)(y)(lambda: 0)(lambda: S(r(y(P)(x))(y))))'
-    nameDict['MOD'] = 'Y(lambda r: lambda x: lambda y: LT(x)(y)(lambda: x)(lambda: r(y(P)(x))(y)))'
+    # Div & Mod
+    token('/', 'Y(#r:#x:#y:<(x)(y)(#:0)(#:++(r(-(x)(y))(y))))') # Div
+    token('%', 'Y(#r:#x:#y:<(x)(y)(#:x)(#:r(-(x)(y))(y)))') # Mod
 
-    # HCF AND LCM
-    nameDict['HCF'] = 'Y(lambda r: lambda x: lambda y: Z(y)(lambda: x)(lambda: r(y)(MOD(x)(y))))'
-    nameDict['LCM'] = '(lambda x: lambda y: DIV(M(x)(y))(HCF(x)(y)))'
+    # HCF & LCM
+    token('HCF', 'Y(#r:#x:#y:Z(y)(#:x)(#:r(y)(%(x)(y))))')
+    token('LCM', '(#x:#y:/(*(x)(y))(HCF(x)(y)))')
 
-    # RATIONAL NUMBERS
-    nameDict['FRAC'] = '(lambda x: lambda y: lambda p: p(lambda: x)(lambda: y))'
-    nameDict['SIM'] = '(lambda p: lambda q: q(lambda: DIV(p(T))(HCF(p(T))(p(F))))(lambda: DIV(p(F))(HCF(p(T))(p(F)))))'
-    nameDict['ADDR'] = '(lambda p: lambda q: SIM(lambda r: r(lambda: (M(p(T))(q(F)))(S)(M(q(T))(p(F))))(lambda: M(p(F))(q(F)))))'
-    nameDict['MULTR'] = '(lambda p: lambda q: SIM(lambda r: r(lambda: M(p(T))(q(T)))(lambda: M(p(F))(q(F)))))'
-    nameDict['SUBR'] = '(lambda p: lambda q: SIM(lambda r: r(lambda: (M(q(T))(p(F)))(P)(M(p(T))(q(F))))(lambda: M(p(F))(q(F)))))'
-    nameDict['DIVR'] = '(lambda p: lambda q: SIM(lambda r: r(lambda: M(p(T))(q(F)))(lambda: M(p(F))(q(T)))))'
+    # Rational Numbers
+    token('FRAC', '(#x:#y:#p:p(#:x)(#:y))')
+    token('SIMP', '(#p:#q:q(#:/(p(T))(HCF(p(T))(p(F))))(#:/(p(F))(HCF(p(T))(p(F)))))')
+    token('+R', '(#p:#q:SIMP(#r:r(#:(*(p(T))(q(F)))(++)(*(q(T))(p(F))))(#:*(p(F))(q(F)))))')
+    token('*R', '(#p:#q:SIMP(#r:r(#:*(p(T))(q(T)))(#:*(p(F))(q(F)))))')
+    token('-R', '(#p:#q:SIMP(#r:r(#:(*(q(T))(p(F)))(--)(*(p(T))(q(F))))(#:*(p(F))(q(F)))))')
+    token('/R', '(#p:#q:SIMP(#r:r(#:*(p(T))(q(F)))(#:*(p(F))(q(T)))))')
 
-    # LINKED LISTS
-    nameDict['NULL'] = 'Null pointer (technically null element)'
-    nameDict['NEWLIST'] = 'The definition of an empty list'
-    nameDict['ISNULL'] = 'Test for null pointer'
-    nameDict['APPEND'] = 'Take list {e1, {e2, {e3, ...}}} and element e0, and return {e0, {e1, {e2, {e3, ...}}}}'
+    # TODO Linked Lists
+    #token('NULL', 'Null pointer (technically null element)')
+    #token('NEWLIST', 'The definition of an empty list')
+    #token('ISNULL', 'Test for null pointer')
+    #token('APPEND', 'Take list {e1, {e2, {e3, ...}}} and element e0, and return {e0, {e1, {e2, {e3, ...}}}}')
     # "HEAD" of list l is just l(T) and "TAIL" of l is just l(F)
     # Define new (high-level) function "printList" to print elements of final list in order?
-    nameDict['INDEX'] = 'Return index of element in list, numbered from 1 (0 meaning not found) - recursive definition'
+    #token('INDEX', 'Return index of element in list, numbered from 1 (0 meaning not found) - recursive definition')
 
-def removeSpaces(expression):
-    ''' Removes unnecessary spaces from expression '''
-    return expression.replace('lambda ', '#').replace(' ', '').replace('#', 'lambda ')
+def math_notation(exp):
+    ''' Translates expanded Python expression into more compact mathematical notation. '''
+    # TODO Variable names collide (implement alpha conversion)
+    return exp.replace('lambda:','').replace('()','').replace(':', '.').replace('lambda ', chr(955))
 
-def mathNotation(expression):
-    ''' Translates expanded Python expression into more compact mathematical notation '''
-    return expression.replace('lambda:','').replace('()','').replace(':', '.').replace('lambda ', chr(955))
+def expand_lambda(exp):
+    ''' Expands '#' to 'lambda'. Used only for compactness in implementation. '''
+    return exp.replace('#:', 'lambda:').replace('#', 'lambda ')
 
-def expand(expression, showExpansion=False):
-    ''' Expands all nameDict in a given expression '''
-    newExpression = removeSpaces(expression[:])
-    identifier = re.compile(r'\([A-Z0-9]+\)|[A-Z0-9]+') # One or more capital letters or numbers, possibly enclosed in parentheses
-    if showExpansion: print('BEGINNING EXPANSION OF:\n\n' + newExpression + '\n')
-    
-    match = identifier.search(newExpression)
+def expand(exp, show_steps=False):
+    ''' Expands all low-level functions in given expression, replacing # with 'lambda'. '''
+    # TODO Implement arity and infix / postfix operators
+    global tokens
+    exp = expand_lambda(exp)
+
+    chrs = '[A-Z0-9+\-*/%=<>~&|\^]'
+    token_re = re.compile('\({0:}+\)|{0:}+'.format(chrs))
+    if show_steps: print('Beginning Expansion of:\n\n' + exp + '\n')
+
+    match = token_re.search(exp)
     while match:
         key = match.group(0)
-        if key[0]=='(': key = key[1:-1]
-        substitution = num(key) if key.isdigit() else nameDict[key]
-        
-        newExpression = newExpression[:match.span()[0]] + removeSpaces(substitution) + newExpression[match.span()[1]:]
-        if showExpansion: print('>>> Expanding', match.group(0) + ':\n\n' + newExpression + '\n')
-        
-        match = identifier.search(newExpression)
-    return newExpression
+        if key[0] == '(': key = key[1:-1]
 
-def execute(expression, *args, showExpansion=False):
-    ''' Executes the given lambda expression with arguments and prints result '''
-    for arg in args: expression = expression + '(' + str(arg) + ')'
-    executable = expand(expression, showExpansion)
-    mathExpression = mathNotation(executable)
-    
-    print('EXPANDED EXPRESSION - Python notation (' + str(len(executable)) + ' characters):\n\n' + executable + '\n')
-    print('EXPANDED EXPRESSION - Mathematical notation (' + str(len(mathExpression)) + ' characters):\n\n' + mathExpression + '\n')
+        subst = expand_lambda(num(key) if key.isdigit() else tokens[key][0])
+        exp = exp[:match.span()[0]] + subst + exp[match.span()[1]:]
+
+        if show_steps: print('>>> Expanding {}:\n\n{}\n'.format(match.group(0), exp))
+        match = token_re.search(exp)
+    return exp
+
+def execute(exp, *args, show_steps=False):
+    ''' Executes given lambda expression with arguments and prints result. '''
+    for arg in args: exp += '({})'.format(arg)
+    exp = expand(exp, show_steps)
+    math_exp = math_notation(exp)
+
+    print('Python notation ({} characters):\n\n{}\n'.format(len(exp), exp))
+    print('Mathematical notation ({} characters):\n\n{}\n'.format(len(math_exp), math_exp))
 
     start_time = clock()
-    result = eval(executable)(lambda x: x+1)(0)
-    time_elapsed = round(clock() - start_time, 4)
-    
-    print('EXECUTION TIME:', time_elapsed, 'seconds')
-    print('NUMERICAL RESULT:', result, '\n')
+    result = eval(exp)(lambda x: x+1)(0) # TODO Supposes numerical result. Extra functionality
+    exec_time = round(clock() - start_time, 4)
 
+    print('Execution Time: {} seconds\nResult: {}'.format(exec_time, result))
 
+tokens = {}
+make_tokens(alt_pred=False)
 
-# High-level functions
+if __name__ == '__main__':
+    # High-level functions
+    FACT = 'Y(#r:#n:Z(n)(#:1)(#:*(n)(r(--(n)))))'
+    FIB = 'Y(#r:#n:<=(n)(2)(#:1)(#:(r(--(n)))(++)(r(--(--(n))))))'
+    ACK = 'Y(#r:#m:#n:Z(m)(#:++(n))(#:Z(n)(#:r(--(m))(1))(#:r(--(m))(r(m)(--(n))))))'
 
-initializeDict(altPred=False)
-
-FACT = 'Y(lambda r: lambda n: Z(n)(lambda: 1)(lambda: M(n)(r(P(n)))))'
-FIB = 'Y(lambda r: lambda n: LTE(n)(2)(lambda: 1)(lambda: (r(P(n)))(S)(r(P(P(n))))))'
-ACK = 'Y(lambda r: lambda m: lambda n: Z(m)(lambda: S(n))(lambda: Z(n)(lambda: r(P(m))(1))(lambda: r(P(m))(r(m)(P(n))))))'
-
-execute(FIB, 8, showExpansion=False)
-#execute(FACT, 7)
-#execute(ACK, 3, 4)
+    execute(FIB, 8, show_steps=False)
+    execute(FACT, 7)
+    execute(ACK, 3, 4)
