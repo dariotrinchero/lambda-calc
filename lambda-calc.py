@@ -2,7 +2,7 @@
 
 import re
 from time import clock
-from typing import Any
+from typing import Union
 
 # NOTE: Since Python uses eager evaluation, selection options must be wrapped in empty lambdas to
 #       prevent execution of non-terminating recursive calls once base case is reached.
@@ -77,7 +77,7 @@ def make_tokens(alt_pred: bool = False) -> None:
 
     # TODO Linked Lists
     #token('NULL', 'Null pointer (technically null element)')
-    #token('NEWLIST', 'The definition of an empty list')
+    #token('LIST', 'The definition of an empty list')
     #token('ISNULL', 'Test for null pointer')
     #token('APPEND', 'Take list {e1, {e2, {e3, ...}}} and element e0, and return {e0, {e1, {e2, {e3, ...}}}}')
     # "HEAD" of list l is just l(T) and "TAIL" of l is just l(F)
@@ -124,7 +124,7 @@ def expand(exp: str, show_steps: bool = False) -> str:
         match = token_re.search(exp)
     return exp
 
-def execute(exp: str, *args: Any, show_steps: bool = False) -> None:
+def execute(exp: str, *args: Union[str, int], show_steps: bool = False) -> None:
     ''' Executes given lambda expression with arguments and prints result. '''
     for arg in args: exp += '({})'.format(arg)
     exp = expand(expand_lambda(exp), show_steps)
@@ -134,7 +134,7 @@ def execute(exp: str, *args: Any, show_steps: bool = False) -> None:
     print('Mathematical notation ({} characters):\n\n{}\n'.format(len(math_exp), math_exp))
 
     start_time = clock()
-    result = eval(exp)(lambda x: x+1)(0) # TODO Supposes numerical result - expand
+    result = eval(exp)(lambda x: x+1)(0) # TODO Add argument 'return_type' and change this accordingly
     exec_time = round(clock() - start_time, 4)
 
     print('Execution Time: {} seconds\nResult: {}'.format(exec_time, result))
