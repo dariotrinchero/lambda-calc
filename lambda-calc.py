@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import re
-from time import clock
+from time import perf_counter
 from typing import Union
 
 # NOTE: Since Python uses eager evaluation, selection options must be wrapped in empty lambdas to
@@ -133,9 +133,9 @@ def execute(exp: str, *args: Union[str, int], show_steps: bool = False) -> None:
     print('Python notation ({} characters):\n\n{}\n'.format(len(exp), exp))
     print('Mathematical notation ({} characters):\n\n{}\n'.format(len(math_exp), math_exp))
 
-    start_time = clock()
+    start_time = perf_counter()
     result = eval(exp)(lambda x: x+1)(0) # TODO Add argument 'return_type' and change this accordingly
-    exec_time = round(clock() - start_time, 4)
+    exec_time = round(perf_counter() - start_time, 4)
 
     print('Execution Time: {} seconds\nResult: {}'.format(exec_time, result))
 
